@@ -2,6 +2,8 @@ const { Client, IntentsBitField, ApplicationCommandOptionType } = require('disco
 const client = new Client({ intents: [IntentsBitField.Flags.Guilds, IntentsBitField.Flags.GuildMembers,IntentsBitField.Flags.GuildMessages, IntentsBitField.Flags.MessageContent] });
 const { REST, Routes } = require('discord.js');
 const dotenv = require('dotenv').config();
+const { searchJob } = require('./apiController');
+const { RateLimiter } = require('discord.js-rate-limiter');
 
 
 // auth
@@ -23,8 +25,8 @@ const command = [
         // additional with the command
         options: [
             {
-                name: 'job-title',
-                description: 'enter the job title ex: frontend dev in baghdad, Iraq',
+                name: 'query',
+                description: 'enter the job title ex: front end web developer in iraq',
                 type: ApplicationCommandOptionType.String,
                 required: true,
             },
@@ -35,7 +37,7 @@ const command = [
                 required: true,
             },
             {
-                name: 'date-posted',
+                name: 'date_posted',
                 description: 'all, today, 3days, week, month',
                 type: ApplicationCommandOptionType.String,
                 required: true,
@@ -64,24 +66,60 @@ client.on('ready', ()=>{
     console.log(`Logged in as ${client.user.tag}!`);
 });
 
+let  rate = new RateLimiter(1, 60*60*1000);
 
 // when user use command, here is the response
-client.on('interactionCreate', interaction => {
+client.on('interactionCreate', async (interaction) => {
     if(!interaction.isChatInputCommand()) return
 
     if(interaction.commandName === 'ping') {
         interaction.reply('pong!');
     } else if(interaction.commandName === 'search') {
-        console.log(interaction.options.data);
-        interaction.reply('under construction');
+
+        // rate limiter passed on the user id
+        let limited = rate.take(interaction.user.id);
+
+        // if the user use his request
+        if(limited) {
+            interaction.reply({
+                content: "too much requests",
+                ephemeral: false
+            });
+
+            return;
+        }
+
+
+        // get the params from user input
+        const options = interaction.options.data;
+
+        // take the options from the user message
+        let params = {};
+
+        options.map((v,i) => {
+            return params[v.name] = v.value  
+        });
+
+
+        try{
+            const reply = await searchJob(params)
+                .then(res => {
+                    interaction.reply({
+                        content: res,
+                        ephemeral: false
+                    });
+                })
+
+
+        } catch(err) {
+            console.log(err);
+        }
+        
     }
 
 });
 
 
-client.login(token);
-
-
 module.exports = {
-    client
+    client,
 }
